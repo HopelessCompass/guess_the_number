@@ -1,118 +1,106 @@
 section .data
-    message db "Enter your number 1-10: ", 0  ; Строка для вывода
-    msg_len equ $ - message             ; Длина строки
+    message db "Enter your number 1-10: ", 0
+    msg_len equ $ - message
 
-    random_number dd 0              ; Переменная для случайного числа
-    user_number dd 0                ; Переменная с числом от пользователя
+    random_number dq 0
+    user_number dq 0
 
-    bytes_written dd 0              ; Переменная для записи числа записанных байтов
+    bytes_written dq 0
 
-    msg_yes db "You're a lucky guy!", 0   ; Сообщение если угадал
-    msg_no db "Unlucky, try again!", 0     ; Сообщение если не угадал
+    msg_yes db "You're a lucky guy!", 0
+    msg_no db "Unlucky, try again!", 0
 
-    hConsole dd 0                   ; Дескриптор консоли
+    hConsole dq 0
 
 section .bss
-    bytes_read resd 1                ; Количество прочитанных байтов
-    user_input resb 128       ; Буфер для ввода пользователя (до 128 байт)
+    bytes_read resq 1
+    user_input resb 128
 
 section .text
     extern GetStdHandle, WriteConsoleA, ReadConsoleA, ExitProcess, GetTickCount
-    global _start
+    global main
 
-_start:
-
-    ;;; Вывод из консоли переменной с msg
-
+main:
     ; Получаем дескриптор стандартного вывода (консоль)
-    push dword -11         ; STD_OUTPUT_HANDLE (-11)
+    sub rsp, 32
+    mov ecx, -11
     call GetStdHandle
-    mov [hConsole], eax    ; Сохраняем дескриптор консоли
+    mov [hConsole], rax
 
-    ; Выводим текст в консоль
-    push dword 0           ; lpReserved (NULL)
-    push dword bytes_written ; Число записанных символов
-    push dword msg_len     ; Длина строки
-    push dword message     ; Адрес строки
-    push dword [hConsole]  ; Дескриптор консоли
-    call WriteConsoleA     ; Вызов API
-
-    ;;; Ввод из консоли в random_number
+    ; Выводим сообщение
+    mov rcx, [hConsole]
+    lea rdx, [message]
+    mov r8, msg_len
+    lea r9, [bytes_written]
+    mov qword [rsp + 32], 0
+    call WriteConsoleA
 
     ; Получаем дескриптор стандартного ввода (консоль)
-    push dword -10         ; STD_INPUT_HANDLE (-10)
+    mov ecx, -10
     call GetStdHandle
-    mov [hConsole], eax    ; Сохраняем дескриптор консоли
+    mov [hConsole], rax
 
-    ; Читаем строку из консоли и пишем в user_input
-    push dword 0           ; lpReserved (NULL)
-    push dword bytes_read  ; Количество прочитанных байтов
-    push dword 128         ; Максимальная длина ввода
-    push dword user_input  ; Буфер для ввода
-    push dword [hConsole]  ; Дескриптор консоли
-    call ReadConsoleA      ; Вызов API
+    ; Читаем ввод
+    mov rcx, [hConsole]
+    lea rdx, [user_input]
+    mov r8, 128
+    lea r9, [bytes_read]
+    mov qword [rsp + 32], 0
+    call ReadConsoleA
 
-    ;;; Преобразуем строку в число
-    lea ecx, [user_input]      ; Загружаем адрес буфера ввода (строку)
-    call string_to_int         ; Преобразуем строку в число
-    mov [user_number], eax     ; Сохраняем результат в user_number
+    ; Преобразуем строку в число
+    lea rcx, [user_input]
+    call string_to_int
+    mov [user_number], rax
 
-    ;;; Генерация случайных чисел из текущего времени в милисекундах
+    ; Генерация случайного числа
     call GetTickCount
-    mov ecx, 10            ; Делим на 10
-    xor edx, edx           ; Обнуляем edx для div
-    div ecx                ; EAX = EAX / 10, остаток в EDX
-    inc edx                ; Делаем диапазон 1–10
-    mov [random_number], edx ; Сохраняем результат
+    mov ecx, 10
+    xor rdx, rdx
+    div rcx
+    inc rdx
+    mov [random_number], rdx
 
-    ;;; Сравниваем число от пользователя и от раднома
+    ; Сравниваем числа
+    mov rax, [user_number]
+    cmp rax, [random_number]
+    je print_yes
+    jmp print_no
 
-    mov eax, [user_number]      ; Загружаем x в eax
-    cmp eax, [random_number]      ; Сравниваем x с 5
-    je print_yes    ; Если числа совпали переходим к print_yes
-    jnz print_no    ; Если числа не совпал переходим к print_no
+print_no:
+    lea rcx, [msg_no]
+    call print_message
+    jmp exit
 
-    print_no:
-        push dword msg_no
-        call print_message
-        jmp exit
+print_yes:
+    lea rcx, [msg_yes]
+    call print_message
+    jmp exit
 
-    print_yes:
-        push dword msg_yes
-        call print_message
-        jmp exit
+print_message:
+    mov rcx, [hConsole]
+    mov rdx, rcx
+    mov r8, msg_len
+    lea r9, [bytes_written]
+    mov qword [rsp + 32], 0
+    call WriteConsoleA
+    ret
 
-    ; Функция для вывода сообщения
-    print_message:
-        ; Выводим текст в консоль
-        push dword 0           ; lpReserved (NULL)
-        push dword bytes_written ; Число записанных символов
-        push dword msg_len     ; Длина строки
-        push dword [esp+4]     ; Адрес строки (msg_yes или msg_no)
-        push dword [hConsole]  ; Дескриптор консоли
-        call WriteConsoleA     ; Вызов API
-        ret
+string_to_int:
+    xor rax, rax
+convert_loop:
+    movzx rdx, byte [rcx]
+    test rdx, rdx
+    jz done
+    sub rdx, '0'
+    imul rax, rax, 10
+    add rax, rdx
+    inc rcx
+    jmp convert_loop
 
-    ; Функция преобразования строки в число
-    ; Вход: ECX - указатель на строку
-    ; Выход: EAX - число
-    string_to_int:
-        xor eax, eax            ; Обнуляем результат
+done:
+    ret
 
-    convert_loop:
-        movzx edx, byte [ecx]   ; Загружаем текущий символ
-        test edx, edx           ; Проверяем на нулевой символ (конец строки)
-        jz done                 ; Если конец строки, выходим
-        sub edx, '0'            ; Преобразуем ASCII-символ в число
-        imul eax, eax, 10       ; Умножаем результат на 10
-        add eax, edx            ; Добавляем текущую цифру
-        inc ecx                 ; Переходим к следующему символу
-        jmp convert_loop        ; Повторяем цикл
-
-    done:
-        ret
-
-    ; Выход из программы
-    exit:
-        push dword 0
-        call ExitProcess
+exit:
+    xor ecx, ecx
+    call ExitProcess
