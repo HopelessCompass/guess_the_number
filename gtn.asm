@@ -67,40 +67,49 @@ main:
     je print_yes
     jmp print_no
 
-print_no:
-    lea rcx, [msg_no]
-    call print_message
-    jmp exit
+    ; Вывод если не угадали
+    print_no:
+        lea rcx, [msg_no]
+        call print_message
+        jmp exit
 
-print_yes:
-    lea rcx, [msg_yes]
-    call print_message
-    jmp exit
+    ; Вывод если угадали
+    print_yes:
+        lea rcx, [msg_yes]
+        call print_message
+        jmp exit
 
-print_message:
-    mov rcx, [hConsole]
-    mov rdx, rcx
-    mov r8, msg_len
-    lea r9, [bytes_written]
-    mov qword [rsp + 32], 0
-    call WriteConsoleA
-    ret
+    ; Условный вывод сообщений
+    print_message:
+        mov rcx, [hConsole]
+        mov rdx, rcx
+        mov r8, msg_len
+        lea r9, [bytes_written]
+        mov qword [rsp + 32], 0
+        call WriteConsoleA
+        ret
 
-string_to_int:
-    xor rax, rax
-convert_loop:
-    movzx rdx, byte [rcx]
-    test rdx, rdx
-    jz done
-    sub rdx, '0'
-    imul rax, rax, 10
-    add rax, rdx
-    inc rcx
-    jmp convert_loop
+    ; Чистка регистра и вызов функции по конвертации строки в число
+    string_to_int:
+        xor rax, rax
+        call convert_loop
 
-done:
-    ret
+    ; Строка в число
+    convert_loop:
+        movzx rdx, byte [rcx]
+        test rdx, rdx
+        jz done
+        sub rdx, '0'
+        imul rax, rax, 10
+        add rax, rdx
+        inc rcx
+        jmp convert_loop
 
-exit:
-    xor ecx, ecx
-    call ExitProcess
+    ; Выход из цикла строки в число
+    done:
+        ret
+
+    ; Завершение программы
+    exit:
+        xor ecx, ecx
+        call ExitProcess
